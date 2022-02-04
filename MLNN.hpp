@@ -37,7 +37,9 @@ public:
         // Load activations
         size_t i = 0;
         for (const size_t node : nodes)
+        {
             activations[i++] = vector<double>(node);
+        }
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--)
@@ -52,6 +54,7 @@ public:
         change[input] = makeMatrix(nodes[input], nodes[output]);
     }
 
+    // Will change. Doesn't compile for most compilers... just GCC
     MLNN(const json &json)
         : input(json[0]), layers(json[1]),
           nodes(json[2]), activations(json[3]),
@@ -77,7 +80,9 @@ protected:
         // No need to set activation here since it gets set in the updater
         nodes[i++] = inputLayer + 1; // + 1 for bias layer
         for (const size_t node : hiddenLayers)
+        {
             nodes[i++] = node;
+        }
         nodes[i] = outputLayer;
 
         return nodes;
@@ -86,7 +91,9 @@ protected:
     void update(const vector<double> &inputs)
     {
         if (inputs.capacity() != input)
+        {
             throw range_error("Incorrect number of inputs");
+        }
         activations[0] = inputs;
 
         // Activations for input + hidden
@@ -116,17 +123,23 @@ protected:
     {
         const size_t last = layers - 1;
         if (targets.capacity() != nodes[last])
+        {
             throw range_error("Wrong number of target values");
+        }
 
         size_t i = 0;
         vector<vector<double>> deltas(layers);
 
         for (const size_t count : nodes)
+        {
             deltas[i++] = vector<double>(count);
+        }
 
         // Calculate error/loss
         for (size_t k = 0; k < nodes[last]; k++)
+        {
             deltas[last][k] = dsigmoid(activations[last][k]) * (targets[k] - activations[last][k]);
+        }
 
         for (size_t outputLayer = last; outputLayer > 0; outputLayer--) // -2
         {
@@ -158,8 +171,6 @@ protected:
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--)
         {
             const size_t inputLayer = outputLayer - 1;
-            // cout << outputLayer << ", " << inputLayer << "\n";
-            // continue;
             for (size_t j = 0; j < nodes[inputLayer]; j++)
             {
                 for (size_t k = 0; k < nodes[outputLayer]; k++)
@@ -175,10 +186,12 @@ protected:
     double calculateError(const vector<double> &targets)
     {
         const size_t end = layers - 1;
-        // Calculate error
+        // Calculate error (MSE)
         double error = 0.0;
         for (size_t k = 0; k < nodes[end]; k++)
+        {
             error += (targets[k] - activations[end][k]) * (targets[k] - activations[end][k]);
+        }
         return error / nodes[end];
     }
 

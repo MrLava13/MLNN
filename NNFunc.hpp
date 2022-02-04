@@ -42,14 +42,15 @@ vector<double> fill(const size_t size, const vector<size_t> inputs)
 {
     vector<double> output(size);
     for (const size_t input : inputs)
+    {
         output[input] = 1.0;
+    }
     return output;
 }
 
-template <class T>
-T rand(const T a, const T b)
+double rand(const double a, const double b)
 {
-    return (b - a) * ((T)std::rand() / RAND_MAX) + a;
+    return (b - a) * ((double)std::rand() / RAND_MAX) + a;
 }
 
 vector<vector<double>> makeMatrix(const size_t I, const size_t J, const double fill = 1.0)
@@ -59,7 +60,9 @@ vector<vector<double>> makeMatrix(const size_t I, const size_t J, const double f
     {
         m[i] = vector<double>(J);
         for (size_t j = 0; j < J; j++)
+        {
             m[i][j] = fill;
+        }
     }
     return m;
 }
@@ -81,13 +84,11 @@ vector<vector<double>> makeRandomMatrix(const size_t I, const size_t J, const do
     {
         m[i] = vector<double>(J);
         for (size_t j = 0; j < J; j++)
+        {
             m[i][j] = rand(a, b);
+        }
     }
     return m;
-}
-const inline float sigmoid(const float x)
-{
-    return tanhf(x);
 }
 
 const inline double sigmoid(const double x)
@@ -95,24 +96,9 @@ const inline double sigmoid(const double x)
     return tanh(x);
 }
 
-const inline long double sigmoid(const long double x)
-{
-    return tanhl(x);
-}
-
-const inline long double dsigmoid(const long double y)
-{
-    return 1.0l - (y * y);
-}
-
 const inline double dsigmoid(const double y)
 {
     return 1.0 - (y * y);
-}
-
-const inline float dsigmoid(const long y)
-{
-    return 1.0f - (y * y);
 }
 
 template <class T>
@@ -122,7 +108,9 @@ string nicePrint(const vector<T> pattern)
     ss << "[";
 
     for (const T p : pattern)
+    {
         ss << p << ", ";
+    }
 
     const string output = ss.str();
     return output.substr(0, output.length() - 2) + "]";
@@ -136,7 +124,9 @@ string nicePrint(const vector<vector<T>> pattern)
     ss << "[";
 
     for (const vector<T> p : pattern)
+    {
         ss << "\n    " << nicePrint(p) << ",";
+    }
 
     const string output = ss.str();
     return output.substr(0, output.length() - 1) + "\n]";
