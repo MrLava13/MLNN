@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 #include <exception>
+#include <random>
+#include <algorithm>
 #include "json.hpp"
 #include "NNFunc.hpp"
 
@@ -13,6 +15,8 @@ using nlohmann::json;
 using std::copy;
 using std::cout;
 using std::endl;
+using std::mt19937_64;
+using std::random_device;
 using std::range_error;
 using std::string;
 using std::to_string;
@@ -21,25 +25,35 @@ using std::vector;
 class MLNN
 {
 public:
-    const size_t input, layers;
-    const vector<size_t> nodes;
+    size_t input, layers;
+    vector<size_t> nodes;
 
 private:
     vector<vector<double>> activations;
     vector<vector<vector<double>>> weights, change;
 
 public:
+    /**
+     * To init, but *please* for the love of god, don't use it like that, nothing is innitiated
+     */
+    MLNN() {}
+    /**
+     * @param inputLayer The amount of neurons for the input layer
+     * @param hiddenLayers The size of each hidden layer
+     * @param outputLayer The number of outputs
+     */
     MLNN(const size_t inputLayer, const vector<size_t> hiddenLayers, const size_t outputLayer)
         : input(inputLayer), layers(hiddenLayers.size() + 2), activations(vector<vector<double>>(layers)),
-          nodes(createNodes(layers, inputLayer, hiddenLayers, outputLayer)),
+          nodes(vector<size_t>(layers)),
           weights(vector<vector<vector<double>>>(layers - 1)), change(vector<vector<vector<double>>>(layers - 1))
     {
-        // Load activations
         size_t i = 0;
-        for (const size_t node : nodes)
-        {
-            activations[i++] = vector<double>(node);
+        activations[i++] = vector<double>(nodes[i] = inputLayer + 1); // + 1 for bias layer
+
+        for (const size_t node : hiddenLayers){
+            activations[i++] = vector<double>(nodes[i] = node);
         }
+         activations[i] = vector<double>(nodes[i] = outputLayer);
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--)
@@ -54,7 +68,10 @@ public:
         change[input] = makeMatrix(nodes[input], nodes[output]);
     }
 
-    // Will change. Doesn't compile for most compilers... just GCC
+    /**
+     * Cursed model loading thing, I will implement my own thing soon-ish
+     * @param json The json of the exported model
+     */
     MLNN(const json &json)
         : input(json[0]), layers(json[1]),
           nodes(json[2]), activations(json[3]),
@@ -67,12 +84,15 @@ public:
 
     vector<double> predict(const vector<double> &inputs)
     {
+        if (inputs.capacity() != input)
+            throw range_error("Incorrect number of inputs");
+
         update(inputs);
         return activations[layers - 1];
     }
 
 protected:
-    static vector<size_t> createNodes(const size_t layers, const size_t inputLayer, const vector<size_t> hiddenLayers, const size_t outputLayer)
+    static vector<size_t> createNodes(const size_t layers, const size_t inputLayer, const vector<size_t> &hiddenLayers, const size_t outputLayer)
     {
         vector<size_t> nodes(layers);
 
@@ -80,9 +100,7 @@ protected:
         // No need to set activation here since it gets set in the updater
         nodes[i++] = inputLayer + 1; // + 1 for bias layer
         for (const size_t node : hiddenLayers)
-        {
             nodes[i++] = node;
-        }
         nodes[i] = outputLayer;
 
         return nodes;
@@ -90,10 +108,6 @@ protected:
 
     void update(const vector<double> &inputs)
     {
-        if (inputs.capacity() != input)
-        {
-            throw range_error("Incorrect number of inputs");
-        }
         activations[0] = inputs;
 
         // Activations for input + hidden
@@ -122,26 +136,19 @@ protected:
     vector<vector<double>> backPropagate(const vector<double> &targets)
     {
         const size_t last = layers - 1;
-        if (targets.capacity() != nodes[last])
-        {
-            throw range_error("Wrong number of target values");
-        }
-
         size_t i = 0;
         vector<vector<double>> deltas(layers);
 
-        for (const size_t count : nodes)
-        {
+        for (const size_t &count : nodes)
             deltas[i++] = vector<double>(count);
-        }
 
         // Calculate error/loss
-        for (size_t k = 0; k < nodes[last]; k++)
-        {
-            deltas[last][k] = dsigmoid(activations[last][k]) * (targets[k] - activations[last][k]);
-        }
 
-        for (size_t outputLayer = last; outputLayer > 0; outputLayer--) // -2
+        // Work from back to front
+        for (size_t k = 0; k < nodes[last]; k++)
+            deltas[last][k] = dsigmoid(activations[last][k]) * (targets[k] - activations[last][k]);
+
+        for (size_t outputLayer = last; outputLayer > 0; outputLayer--)
         {
             const size_t inputLayer = outputLayer - 1;
             for (size_t j = 0; j < nodes[inputLayer]; j++)
@@ -171,6 +178,8 @@ protected:
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--)
         {
             const size_t inputLayer = outputLayer - 1;
+            // cout << outputLayer << ", " << inputLayer << "\n";
+            // continue;
             for (size_t j = 0; j < nodes[inputLayer]; j++)
             {
                 for (size_t k = 0; k < nodes[outputLayer]; k++)
@@ -186,19 +195,17 @@ protected:
     double calculateError(const vector<double> &targets)
     {
         const size_t end = layers - 1;
-        // Calculate error (MSE)
+        // Calculate error
         double error = 0.0;
         for (size_t k = 0; k < nodes[end]; k++)
-        {
             error += (targets[k] - activations[end][k]) * (targets[k] - activations[end][k]);
-        }
         return error / nodes[end];
     }
 
 public:
     void test(const vector<vector<vector<double>>> &patterns)
     {
-        for (const vector<vector<double>> pattern : patterns)
+        for (const vector<vector<double>> &pattern : patterns)
         {
             cout << nicePrint(pattern[0]);
             cout << " -> " << nicePrint(predict(pattern[0])) << endl;
@@ -207,7 +214,7 @@ public:
 
     void test(const vector<vector<double>> &patterns)
     {
-        for (const vector<double> pattern : patterns)
+        for (const vector<double> &pattern : patterns)
         {
             // cout << nicePrint(pattern);
             cout << " -> " << nicePrint(predict(pattern)) << endl;
@@ -216,19 +223,26 @@ public:
 
     double train(const vector<vector<vector<double>>> &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1)
     {
+        const size_t last = layers - 1;
+        for (const vector<vector<double>> &pattern : patterns)
+        {
+            if (pattern[0].size() != input)
+                throw range_error("Wrong number of input values");
+            if (pattern[1].size() != nodes[last])
+                throw range_error("Wrong number of target values");
+        }
         double error;
         for (size_t i = 0; i < iterations; i++)
         {
-            for (const vector<vector<double>> pattern : patterns)
+            for (const vector<vector<double>> &pattern : patterns)
             {
                 update(pattern[0]);
-                // backPropagate(pattern[1]);
                 updateWeights(backPropagate(pattern[1]), N, M);
             }
-            if (i % 10000 == 0)
+            if (i % 10000 == 0) // Should make adjustable
             {
                 error = 0.0;
-                for (const vector<vector<double>> pattern : patterns)
+                for (const vector<vector<double>> &pattern : patterns)
                 {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
@@ -239,7 +253,52 @@ public:
 
         // Get error
         error = 0.0;
-        for (const vector<vector<double>> pattern : patterns)
+        for (const vector<vector<double>> &pattern : patterns)
+        {
+            update(pattern[0]);
+            error += calculateError(pattern[1]);
+        }
+        return error;
+    }
+
+    double randTrain(const vector<vector<vector<double>>> &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1)
+    {
+        const size_t last = layers - 1;
+        for (const vector<vector<double>> &pattern : patterns)
+        {
+            if (pattern[0].size() != input)
+                throw range_error("Wrong number of input values");
+            if (pattern[1].size() != nodes[last])
+                throw range_error("Wrong number of target values");
+        }
+        mt19937_64 g((random_device())());
+
+        double error;
+        for (size_t i = 0; i < iterations; i++)
+        {
+            vector<vector<vector<double>>> ps = patterns;
+            shuffle(ps.begin(), ps.end(), g);
+
+            for (const vector<vector<double>> &pattern : ps)
+            {
+                update(pattern[0]);
+                updateWeights(backPropagate(pattern[1]), N, M);
+            }
+            if (i % 10000 == 0) // Should make adjustable
+            {
+                error = 0.0;
+                for (const vector<vector<double>> &pattern : patterns)
+                {
+                    update(pattern[0]);
+                    error += calculateError(pattern[1]);
+                }
+                cout << "MSE: " << error << endl;
+            }
+        }
+
+        // Get error
+        error = 0.0;
+        for (const vector<vector<double>> &pattern : patterns)
         {
             update(pattern[0]);
             error += calculateError(pattern[1]);
@@ -252,7 +311,7 @@ public:
         string output;
 
         size_t i = 0;
-        for (const vector<vector<double>> weight : weights)
+        for (const vector<vector<double>> &weight : weights)
         {
             output += "\nLayer " + to_string(i++) + ":\n" + nicePrint(weight);
         }
@@ -268,5 +327,18 @@ public:
                 activations,
                 weights,
                 change};
+    }
+
+    MLNN &operator=(const MLNN &nn)
+    {
+        input = nn.input;
+        layers = nn.layers;
+        nodes = nn.nodes;
+
+        activations = nn.activations;
+        weights = nn.weights;
+        change = nn.change;
+
+        return *this;
     }
 };
