@@ -1,6 +1,7 @@
 #pragma once
 
 #include "NNFunc.hpp"
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <fstream>
@@ -19,6 +20,7 @@ using std::ofstream;
 using std::random_device;
 using std::range_error;
 using std::runtime_error;
+using std::shuffle;
 using std::streamsize;
 using std::string;
 using std::to_string;
@@ -30,8 +32,8 @@ public:
     vector<size_t> nodes;
 
 private:
-    vector<vector<double>> activations;
-    vector<vector<vector<double>>> weights, change;
+    twoDimensional activations;
+    threeDimensional weights, change;
 
 public:
     /**
@@ -50,16 +52,16 @@ public:
      */
 
     MLNN(const size_t inputLayer, const vector<size_t> hiddenLayers, const size_t outputLayer)
-        : input(inputLayer), layers(hiddenLayers.size() + 2), activations(vector<vector<double>>(layers)),
+        : input(inputLayer), layers(hiddenLayers.size() + 2), activations(twoDimensional(layers)),
           nodes(vector<size_t>(layers)),
-          weights(vector<vector<vector<double>>>(layers - 1)), change(vector<vector<vector<double>>>(layers - 1)) {
+          weights(threeDimensional(layers - 1)), change(threeDimensional(layers - 1)) {
         size_t i = 0;
-        activations[i++] = vector<double>(nodes[i] = inputLayer + 1); // + 1 for bias layer
+        activations[i++] = oneDimensional(nodes[i] = inputLayer + 1); // + 1 for bias layer
 
         for (const size_t node : hiddenLayers) {
-            activations[i++] = vector<double>(nodes[i] = node);
+            activations[i++] = oneDimensional(nodes[i] = node);
         }
-        activations[i] = vector<double>(nodes[i] = outputLayer);
+        activations[i] = oneDimensional(nodes[i] = outputLayer);
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
@@ -91,23 +93,23 @@ public:
 
         // Load header stuff
         in.read((char *)&layers, st_size);
-        activations = vector<vector<double>>(layers);
+        activations = twoDimensional(layers);
         nodes = vector<size_t>(layers);
         size_t i = 0;
         for (size_t &node : nodes) {
             in.read((char *)&node, st_size);
-            activations[i++] = vector<double>(node);
+            activations[i++] = oneDimensional(node);
         }
         input = nodes[0] - 1;
 
         const size_t layersToLoad = layers - 1;
-        weights = change = vector<vector<vector<double>>>(layersToLoad);
+        weights = change = threeDimensional(layersToLoad);
         // Load weights
         for (size_t i = 0; i < layersToLoad; i++) {
             const size_t output = nodes[i + 1], input = nodes[i];
-            weights[i] = change[i] = vector<vector<double>>(input);
+            weights[i] = change[i] = twoDimensional(input);
             for (size_t j = 0; j < input; j++) {
-                weights[i][j] = change[i][j] = vector<double>(output);
+                weights[i][j] = change[i][j] = oneDimensional(output);
                 for (size_t k = 0; k < output; k++) {
                     in.read((char *)&weights[i][j][k], double_size);
                     in.read((char *)&change[i][j][k], double_size);
@@ -127,7 +129,7 @@ public:
           activations(MLNN.activations),
           weights(MLNN.weights), change(MLNN.change) {}
 
-    vector<double> predict(const vector<double> &inputs) {
+    oneDimensional predict(const oneDimensional &inputs) {
         if (inputs.capacity() != input) {
             throw range_error("Incorrect number of inputs");
         }
@@ -137,7 +139,7 @@ public:
     }
 
 protected:
-    void update(const vector<double> &inputs) {
+    void update(const oneDimensional &inputs) {
         activations[0] = inputs;
 
         // Activations for input + hidden
@@ -160,13 +162,14 @@ protected:
      * @return The deltas (gradiants)
      */
 
-    vector<vector<double>> backPropagate(const vector<double> &targets) {
+    twoDimensional backPropagate(const oneDimensional &targets) {
         const size_t last = layers - 1;
         size_t i = 0;
-        vector<vector<double>> deltas(layers);
+        twoDimensional deltas(layers);
 
-        for (const size_t &count : nodes)
-            deltas[i++] = vector<double>(count);
+        for (const size_t &count : nodes) {
+            deltas[i++] = oneDimensional(count);
+        }
 
         // Calculate error/loss
 
@@ -196,7 +199,7 @@ protected:
      * @param momentumFactor The momentum factor
      */
 
-    void updateWeights(const vector<vector<double>> &deltas, const double learningRate, const double momentumFactor) {
+    void updateWeights(const twoDimensional &deltas, const double learningRate, const double momentumFactor) {
         // Update weights
 
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
@@ -213,33 +216,34 @@ protected:
         }
     }
 
-    double calculateError(const vector<double> &targets) {
+    double calculateError(const oneDimensional &targets) {
         const size_t end = layers - 1;
         // Calculate error
         double error = 0.0;
-        for (size_t k = 0; k < nodes[end]; k++)
+        for (size_t k = 0; k < nodes[end]; k++) {
             error += (targets[k] - activations[end][k]) * (targets[k] - activations[end][k]);
+        }
         return error / nodes[end];
     }
 
 public:
-    void test(const vector<vector<vector<double>>> &patterns) {
-        for (const vector<vector<double>> &pattern : patterns) {
-            cout << nicePrint(pattern[0]);
-            cout << " -> " << nicePrint(predict(pattern[0])) << endl;
+    void test(const threeDimensional &patterns) {
+        for (const twoDimensional &pattern : patterns) {
+            cout << prettifyVector(pattern[0]);
+            cout << " -> " << prettifyVector(predict(pattern[0])) << endl;
         }
     }
 
-    void test(const vector<vector<double>> &patterns) {
-        for (const vector<double> &pattern : patterns) {
-            // cout << nicePrint(pattern);
-            cout << " -> " << nicePrint(predict(pattern)) << endl;
+    void test(const twoDimensional &patterns) {
+        for (const oneDimensional &pattern : patterns) {
+            // cout << prettifyVector(pattern);
+            cout << " -> " << prettifyVector(predict(pattern)) << endl;
         }
     }
 
-    double train(const vector<vector<vector<double>>> &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
+    double train(const threeDimensional &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
         const size_t last = layers - 1;
-        for (const vector<vector<double>> &pattern : patterns) {
+        for (const twoDimensional &pattern : patterns) {
             if (pattern[0].size() != input) {
                 throw range_error("Wrong number of input values");
             }
@@ -249,14 +253,14 @@ public:
         }
         double error;
         for (size_t i = 0; i < iterations; i++) {
-            for (const vector<vector<double>> &pattern : patterns) {
+            for (const twoDimensional &pattern : patterns) {
                 update(pattern[0]);
                 updateWeights(backPropagate(pattern[1]), N, M);
             }
             if (i % 10000 == 0) // Should make adjustable
             {
                 error = 0.0;
-                for (const vector<vector<double>> &pattern : patterns) {
+                for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
                 }
@@ -266,16 +270,16 @@ public:
 
         // Get error
         error = 0.0;
-        for (const vector<vector<double>> &pattern : patterns) {
+        for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
         }
         return error;
     }
 
-    double randTrain(const vector<vector<vector<double>>> &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
+    double randTrain(const threeDimensional &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
         const size_t last = layers - 1;
-        for (const vector<vector<double>> &pattern : patterns) {
+        for (const twoDimensional &pattern : patterns) {
             if (pattern[0].size() != input) {
                 throw range_error("Wrong number of input values");
             }
@@ -287,17 +291,17 @@ public:
 
         double error;
         for (size_t i = 0; i < iterations; i++) {
-            vector<vector<vector<double>>> ps = patterns;
+            threeDimensional ps = patterns;
             shuffle(ps.begin(), ps.end(), g);
 
-            for (const vector<vector<double>> &pattern : ps) {
+            for (const twoDimensional &pattern : ps) {
                 update(pattern[0]);
                 updateWeights(backPropagate(pattern[1]), N, M);
             }
             if (i % 10000 == 0) // Should make adjustable
             {
                 error = 0.0;
-                for (const vector<vector<double>> &pattern : patterns) {
+                for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
                 }
@@ -307,7 +311,7 @@ public:
 
         // Get error
         error = 0.0;
-        for (const vector<vector<double>> &pattern : patterns) {
+        for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
         }
@@ -318,8 +322,8 @@ public:
         string output;
 
         size_t i = 0;
-        for (const vector<vector<double>> &weight : weights) {
-            output += "\nLayer " + to_string(i++) + ":\n" + nicePrint(weight);
+        for (const twoDimensional &weight : weights) {
+            output += "\nLayer " + to_string(i++) + ":\n" + prettifyVector(weight);
         }
 
         return output;
@@ -337,7 +341,7 @@ public:
         return *this;
     }
 
-    bool toFile(const char *path) {
+    bool toFile(const char *path) const {
         // Attempt to open the output file
         ofstream out;
         out.open(path, ios::out | ios::trunc | ios::binary);
