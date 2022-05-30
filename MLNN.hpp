@@ -35,6 +35,14 @@ private:
     twoDimensional activations;
     threeDimensional weights, change;
 
+    // Random number generator
+    mt19937_64 g = mt19937_64((random_device())());
+
+    // Variable sizes, for import and export
+    static const streamsize
+        st_size = sizeof(size_t),
+        double_size = sizeof(double);
+
 public:
     /**
      * Empty initializer, but *please* for the love of god, don't use it
@@ -55,13 +63,13 @@ public:
         : input(inputLayer), layers(hiddenLayers.size() + 2), activations(twoDimensional(layers)),
           nodes(vector<size_t>(layers)),
           weights(threeDimensional(layers - 1)), change(threeDimensional(layers - 1)) {
-        size_t i = 0;
-        activations[i++] = oneDimensional(nodes[i] = inputLayer + 1); // + 1 for bias layer
-
-        for (const size_t node : hiddenLayers) {
-            activations[i++] = oneDimensional(nodes[i] = node);
+        const size_t end = layers - 2;
+        activations[0].reserve(nodes[0] = inputLayer + 1); // + 1 for bias layer
+        for(size_t i = 0; i < end; i++) {
+            const size_t j = i + 1;
+            activations[j].reserve(nodes[j] = hiddenLayers[i]);
         }
-        activations[i] = oneDimensional(nodes[i] = outputLayer);
+        activations[layers - 1].reserve(nodes[layers - 1] = outputLayer);
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
@@ -77,6 +85,8 @@ public:
 
     /**
      * Loads a network from a given file
+     *
+     * @param path The file path
      */
 
     MLNN(const char *path) {
@@ -86,30 +96,28 @@ public:
             throw runtime_error("Cannot open the given file");
         }
 
-        // Get the sizes of variables
-        const streamsize
-            st_size = sizeof(size_t),
-            double_size = sizeof(double);
-
         // Load header stuff
         in.read((char *)&layers, st_size);
-        activations = twoDimensional(layers);
+        activations.reserve(layers);
         nodes = vector<size_t>(layers);
-        size_t i = 0;
-        for (size_t &node : nodes) {
+        for (size_t i = 0; i < layers; i++) {
+            size_t node;
             in.read((char *)&node, st_size);
-            activations[i++] = oneDimensional(node);
+            activations[i++].reserve(nodes[i] = node);
         }
-        input = nodes[0] - 1;
+        input = nodes[0] - 1; // Set the input
 
         const size_t layersToLoad = layers - 1;
-        weights = change = threeDimensional(layersToLoad);
-        // Load weights
+        weights.reserve(layersToLoad);
+        change.reserve(layersToLoad);
+        // Load weights and change
         for (size_t i = 0; i < layersToLoad; i++) {
             const size_t output = nodes[i + 1], input = nodes[i];
-            weights[i] = change[i] = twoDimensional(input);
+            weights[i].reserve(input);
+            change[i].reserve(input);
             for (size_t j = 0; j < input; j++) {
-                weights[i][j] = change[i][j] = oneDimensional(output);
+                weights[i][j].reserve(output);
+                change[i][j].reserve(output);
                 for (size_t k = 0; k < output; k++) {
                     in.read((char *)&weights[i][j][k], double_size);
                     in.read((char *)&change[i][j][k], double_size);
@@ -129,13 +137,42 @@ public:
           activations(MLNN.activations),
           weights(MLNN.weights), change(MLNN.change) {}
 
-    oneDimensional predict(const oneDimensional &inputs) {
+    oneDimensional predict(const oneDimensional &inputs) const {
+        // Verify the input is the correct size
         if (inputs.capacity() != input) {
             throw range_error("Incorrect number of inputs");
         }
 
-        update(inputs);
-        return activations[layers - 1];
+        // Create the input output vectors
+        oneDimensional in(nodes[1]), out;
+
+        // Run the activations for the input layer
+        for (size_t j = 0; j < nodes[1]; j++) {
+            double sum = 0.0;
+            for (size_t i = 0; i < nodes[0]; i++) {
+                sum += inputs[i] * weights[0][i][j];
+            }
+            in[j] = sigmoid(sum);
+        }
+
+        // Run the activations for hidden layers
+        const size_t end = layers - 1;
+        for (size_t inputLayer = 1; inputLayer < end; inputLayer++) {
+            const size_t outputLayer = inputLayer + 1;
+            out.resize(nodes[outputLayer]);
+            for (size_t j = 0; j < nodes[outputLayer]; j++) {
+                double sum = 0.0;
+                for (size_t i = 0; i < nodes[inputLayer]; i++) {
+                    sum += in[i] * weights[inputLayer][i][j];
+                }
+                out[j] = sigmoid(sum);
+            }
+            if (outputLayer != end) {
+                in = out;
+            }
+        }
+
+        return out;
     }
 
 protected:
@@ -168,12 +205,10 @@ protected:
         twoDimensional deltas(layers);
 
         for (const size_t &count : nodes) {
-            deltas[i++] = oneDimensional(count);
+            deltas[i++].reserve(count);
         }
 
-        // Calculate error/loss
-
-        // Work from back to front
+        // Calculate error/loss, working from back to front
         for (size_t k = 0; k < nodes[last]; k++) {
             deltas[last][k] = dsigmoid(activations[last][k]) * (targets[k] - activations[last][k]);
         }
@@ -182,8 +217,9 @@ protected:
             const size_t inputLayer = outputLayer - 1;
             for (size_t j = 0; j < nodes[inputLayer]; j++) {
                 double error = 0.0;
-                for (size_t k = 0; k < nodes[outputLayer]; k++)
+                for (size_t k = 0; k < nodes[outputLayer]; k++) {
                     error += deltas[outputLayer][k] * weights[inputLayer][j][k];
+                }
                 deltas[inputLayer][j] = dsigmoid(activations[inputLayer][j]) * error;
             }
         }
@@ -200,12 +236,9 @@ protected:
      */
 
     void updateWeights(const twoDimensional &deltas, const double learningRate, const double momentumFactor) {
-        // Update weights
-
+        // Update weights with the given deltas
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
             const size_t inputLayer = outputLayer - 1;
-            // cout << outputLayer << ", " << inputLayer << "\n";
-            // continue;
             for (size_t j = 0; j < nodes[inputLayer]; j++) {
                 for (size_t k = 0; k < nodes[outputLayer]; k++) {
                     const double change = deltas[outputLayer][k] * activations[inputLayer][j];
@@ -216,7 +249,7 @@ protected:
         }
     }
 
-    double calculateError(const oneDimensional &targets) {
+    double calculateError(const oneDimensional &targets) const {
         const size_t end = layers - 1;
         // Calculate error
         double error = 0.0;
@@ -227,14 +260,14 @@ protected:
     }
 
 public:
-    void test(const threeDimensional &patterns) {
+    void test(const threeDimensional &patterns) const {
         for (const twoDimensional &pattern : patterns) {
             cout << prettifyVector(pattern[0]);
             cout << " -> " << prettifyVector(predict(pattern[0])) << endl;
         }
     }
 
-    void test(const twoDimensional &patterns) {
+    void test(const twoDimensional &patterns) const {
         for (const oneDimensional &pattern : patterns) {
             // cout << prettifyVector(pattern);
             cout << " -> " << prettifyVector(predict(pattern)) << endl;
@@ -251,7 +284,6 @@ public:
                 throw range_error("Wrong number of target values");
             }
         }
-        double error;
         for (size_t i = 0; i < iterations; i++) {
             for (const twoDimensional &pattern : patterns) {
                 update(pattern[0]);
@@ -259,7 +291,7 @@ public:
             }
             if (i % 10000 == 0) // Should make adjustable
             {
-                error = 0.0;
+                double error = 0.0;
                 for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
@@ -269,7 +301,7 @@ public:
         }
 
         // Get error
-        error = 0.0;
+        double error = 0.0;
         for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
@@ -277,8 +309,10 @@ public:
         return error;
     }
 
-    double randTrain(const threeDimensional &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
+    double randTrain(threeDimensional patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
         const size_t last = layers - 1;
+
+        // Verify the patterns are the right size to be used in the network
         for (const twoDimensional &pattern : patterns) {
             if (pattern[0].size() != input) {
                 throw range_error("Wrong number of input values");
@@ -287,20 +321,20 @@ public:
                 throw range_error("Wrong number of target values");
             }
         }
-        mt19937_64 g((random_device())());
 
-        double error;
         for (size_t i = 0; i < iterations; i++) {
-            threeDimensional ps = patterns;
-            shuffle(ps.begin(), ps.end(), g);
+            // Randomize the values
+            shuffle(patterns.begin(), patterns.end(), g);
 
-            for (const twoDimensional &pattern : ps) {
+            // Train on the values
+            for (const twoDimensional &pattern : patterns) {
                 update(pattern[0]);
                 updateWeights(backPropagate(pattern[1]), N, M);
             }
-            if (i % 10000 == 0) // Should make adjustable
-            {
-                error = 0.0;
+
+            // Verbose on training (Should make adjustable)
+            if (i % 10000 == 0) {
+                double error = 0.0;
                 for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
@@ -309,8 +343,8 @@ public:
             }
         }
 
-        // Get error
-        error = 0.0;
+        // Get the error of the network
+        double error = 0.0;
         for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
@@ -318,7 +352,7 @@ public:
         return error;
     }
 
-    string toString() {
+    string toString() const {
         string output;
 
         size_t i = 0;
@@ -349,20 +383,20 @@ public:
             return false; // Failed to open
         }
 
-        // Get the sizes of variables
-        const streamsize
-            st_size = sizeof(size_t),
-            double_size = sizeof(double);
+        /**
+         * Write header stuff to file
+         *
+         * Number of layers then the number of nodes per layer
+         */
 
-        // Write header stuff
         out.write((char *)&layers, st_size);
         for (const size_t &node : nodes) {
             out.write((char *)&node, st_size);
         }
 
-        const size_t layersToLoad = layers - 1;
-        // Write data
-        for (size_t i = 0; i < layersToLoad; i++) {
+        // Write the values to file
+        const size_t layersToExport = layers - 1;
+        for (size_t i = 0; i < layersToExport; i++) {
             const size_t output = nodes[i + 1], input = nodes[i];
             for (size_t j = 0; j < input; j++) {
                 for (size_t k = 0; k < output; k++) {

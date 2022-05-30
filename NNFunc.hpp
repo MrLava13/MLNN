@@ -11,6 +11,7 @@ using std::string;
 using std::to_string;
 using std::vector;
 
+// Some type defines because it is somewhat tedious to type out
 typedef vector<double> oneDimensional;
 typedef vector<oneDimensional> twoDimensional;
 typedef vector<twoDimensional> threeDimensional;
