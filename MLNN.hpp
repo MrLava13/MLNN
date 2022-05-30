@@ -63,13 +63,13 @@ public:
         : input(inputLayer), layers(hiddenLayers.size() + 2), activations(twoDimensional(layers)),
           nodes(vector<size_t>(layers)),
           weights(threeDimensional(layers - 1)), change(threeDimensional(layers - 1)) {
-        const size_t end = layers - 2;
-        activations[0].reserve(nodes[0] = inputLayer + 1); // + 1 for bias layer
-        for(size_t i = 0; i < end; i++) {
-            const size_t j = i + 1;
-            activations[j].reserve(nodes[j] = hiddenLayers[i]);
+        size_t i = 0;
+        activations[i++] = oneDimensional(nodes[i] = inputLayer + 1); // + 1 for bias layer
+
+        for (const size_t node : hiddenLayers) {
+            activations[i++] = oneDimensional(nodes[i] = node);
         }
-        activations[layers - 1].reserve(nodes[layers - 1] = outputLayer);
+        activations[i] = oneDimensional(nodes[i] = outputLayer);
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
@@ -89,35 +89,37 @@ public:
      * @param path The file path
      */
 
-    MLNN(const char *path) {
+     MLNN(const char *path) {
         ifstream in;
         in.open(path, ios::in | ios::binary);
         if (!in.is_open()) {
             throw runtime_error("Cannot open the given file");
         }
 
+        // Get the sizes of variables
+        const streamsize
+            st_size = sizeof(size_t),
+            double_size = sizeof(double);
+
         // Load header stuff
         in.read((char *)&layers, st_size);
-        activations.reserve(layers);
+        activations = twoDimensional(layers);
         nodes = vector<size_t>(layers);
-        for (size_t i = 0; i < layers; i++) {
-            size_t node;
+        size_t i = 0;
+        for (size_t &node : nodes) {
             in.read((char *)&node, st_size);
-            activations[i++].reserve(nodes[i] = node);
+            activations[i++] = oneDimensional(node);
         }
-        input = nodes[0] - 1; // Set the input
+        input = nodes[0] - 1;
 
         const size_t layersToLoad = layers - 1;
-        weights.reserve(layersToLoad);
-        change.reserve(layersToLoad);
-        // Load weights and change
+        weights = change = threeDimensional(layersToLoad);
+        // Load weights
         for (size_t i = 0; i < layersToLoad; i++) {
             const size_t output = nodes[i + 1], input = nodes[i];
-            weights[i].reserve(input);
-            change[i].reserve(input);
+            weights[i] = change[i] = twoDimensional(input);
             for (size_t j = 0; j < input; j++) {
-                weights[i][j].reserve(output);
-                change[i][j].reserve(output);
+                weights[i][j] = change[i][j] = oneDimensional(output);
                 for (size_t k = 0; k < output; k++) {
                     in.read((char *)&weights[i][j][k], double_size);
                     in.read((char *)&change[i][j][k], double_size);
