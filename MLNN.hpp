@@ -65,7 +65,6 @@ public:
           weights(threeDimensional(layers - 1)), change(threeDimensional(layers - 1)) {
         size_t i = 0;
         activations[i++] = oneDimensional(nodes[i] = inputLayer + 1); // + 1 for bias layer
-
         for (const size_t node : hiddenLayers) {
             activations[i++] = oneDimensional(nodes[i] = node);
         }
@@ -95,11 +94,6 @@ public:
         if (!in.is_open()) {
             throw runtime_error("Cannot open the given file");
         }
-
-        // Get the sizes of variables
-        const streamsize
-            st_size = sizeof(size_t),
-            double_size = sizeof(double);
 
         // Load header stuff
         in.read((char *)&layers, st_size);
