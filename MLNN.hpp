@@ -10,9 +10,7 @@
 #include <string>
 #include <vector>
 
-using std::copy;
 using std::cout;
-using std::endl;
 using std::ifstream;
 using std::ios;
 using std::mt19937_64;
@@ -63,12 +61,13 @@ public:
         : input(inputLayer), layers(hiddenLayers.size() + 2), activations(twoDimensional(layers)),
           nodes(vector<size_t>(layers)),
           weights(threeDimensional(layers - 1)), change(threeDimensional(layers - 1)) {
-        size_t i = 0;
-        activations[i++] = oneDimensional(nodes[i] = inputLayer + 1); // + 1 for bias layer
-        for (const size_t node : hiddenLayers) {
-            activations[i++] = oneDimensional(nodes[i] = node);
+        const size_t end = layers - 2;
+        activations[0] = oneDimensional(nodes[0] = inputLayer + 1); // + 1 for bias layer
+        for (size_t i = 0; i < end; i++) {
+            const size_t j = i + 1;
+            activations[j] = oneDimensional(nodes[j] = hiddenLayers[i]);
         }
-        activations[i] = oneDimensional(nodes[i] = outputLayer);
+        activations[layers - 1] = oneDimensional(nodes[layers - 1] = outputLayer);
 
         // Load weights and change
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
@@ -88,7 +87,7 @@ public:
      * @param path The file path
      */
 
-     MLNN(const char *path) {
+    MLNN(const char *path) {
         ifstream in;
         in.open(path, ios::in | ios::binary);
         if (!in.is_open()) {
@@ -259,14 +258,14 @@ public:
     void test(const threeDimensional &patterns) const {
         for (const twoDimensional &pattern : patterns) {
             cout << prettifyVector(pattern[0]);
-            cout << " -> " << prettifyVector(predict(pattern[0])) << endl;
+            cout << " -> " << prettifyVector(predict(pattern[0])) << '\n';
         }
     }
 
     void test(const twoDimensional &patterns) const {
         for (const oneDimensional &pattern : patterns) {
             // cout << prettifyVector(pattern);
-            cout << " -> " << prettifyVector(predict(pattern)) << endl;
+            cout << " -> " << prettifyVector(predict(pattern)) << '\n';
         }
     }
 
@@ -292,7 +291,7 @@ public:
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
                 }
-                cout << "MSE: " << error << endl;
+                cout << "MSE: " << error << '\n';
             }
         }
 
@@ -335,7 +334,7 @@ public:
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
                 }
-                cout << "MSE: " << error << endl;
+                cout << "MSE: " << error << '\n';
             }
         }
 
