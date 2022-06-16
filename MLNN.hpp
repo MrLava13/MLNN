@@ -39,7 +39,7 @@ private:
     // Variable sizes, for import and export
     static const streamsize
         st_size = sizeof(size_t),
-        double_size = sizeof(double);
+        float_size = sizeof(float);
 
 public:
     /**
@@ -70,13 +70,13 @@ public:
         activations[layers - 1] = oneDimensional(nodes[layers - 1] = outputLayer);
 
         // Load weights and change
-        for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
+        for (size_t outputLayer = end; outputLayer > 0; outputLayer--) {
             const size_t inputLayer = outputLayer - 1;
             weights[inputLayer] = makeRandomMatrix(nodes[inputLayer], nodes[outputLayer], -0.2, 0.2);
             change[inputLayer] = makeMatrix(nodes[inputLayer], nodes[outputLayer]);
         }
 
-        const size_t input = layers - 2, output = layers - 1;
+        const size_t input = end, output = layers - 1;
         weights[input] = makeRandomMatrix(nodes[input], nodes[output], -2.0, 2.0);
         change[input] = makeMatrix(nodes[input], nodes[output]);
     }
@@ -114,8 +114,8 @@ public:
             for (size_t j = 0; j < input; j++) {
                 weights[i][j] = change[i][j] = oneDimensional(output);
                 for (size_t k = 0; k < output; k++) {
-                    in.read((char *)&weights[i][j][k], double_size);
-                    in.read((char *)&change[i][j][k], double_size);
+                    in.read((char *)&weights[i][j][k], float_size);
+                    in.read((char *)&change[i][j][k], float_size);
                 }
             }
         }
@@ -143,7 +143,7 @@ public:
 
         // Run the activations for the input layer
         for (size_t j = 0; j < nodes[1]; j++) {
-            double sum = 0.0;
+            float sum = 0.0;
             for (size_t i = 0; i < nodes[0]; i++) {
                 sum += inputs[i] * weights[0][i][j];
             }
@@ -156,7 +156,7 @@ public:
             const size_t outputLayer = inputLayer + 1;
             out.resize(nodes[outputLayer]);
             for (size_t j = 0; j < nodes[outputLayer]; j++) {
-                double sum = 0.0;
+                float sum = 0.0;
                 for (size_t i = 0; i < nodes[inputLayer]; i++) {
                     sum += in[i] * weights[inputLayer][i][j];
                 }
@@ -170,7 +170,7 @@ public:
         return out;
     }
 
-protected:
+private:
     void update(const oneDimensional &inputs) {
         activations[0] = inputs;
 
@@ -178,7 +178,7 @@ protected:
         for (size_t inputLayer = 0; inputLayer < layers - 1; inputLayer++) {
             const size_t outputLayer = inputLayer + 1;
             for (size_t j = 0; j < nodes[outputLayer]; j++) {
-                double sum = 0.0;
+                float sum = 0.0;
                 for (size_t i = 0; i < nodes[inputLayer]; i++) {
                     sum += activations[inputLayer][i] * weights[inputLayer][i][j];
                 }
@@ -196,11 +196,10 @@ protected:
 
     twoDimensional backPropagate(const oneDimensional &targets) {
         const size_t last = layers - 1;
-        size_t i = 0;
         twoDimensional deltas(layers);
 
-        for (const size_t &count : nodes) {
-            deltas[i++].reserve(count);
+        for(size_t i = 0; i < layers; i++){
+            deltas[i].reserve(nodes[i]);
         }
 
         // Calculate error/loss, working from back to front
@@ -211,7 +210,7 @@ protected:
         for (size_t outputLayer = last; outputLayer > 0; outputLayer--) {
             const size_t inputLayer = outputLayer - 1;
             for (size_t j = 0; j < nodes[inputLayer]; j++) {
-                double error = 0.0;
+                float error = 0.0;
                 for (size_t k = 0; k < nodes[outputLayer]; k++) {
                     error += deltas[outputLayer][k] * weights[inputLayer][j][k];
                 }
@@ -230,13 +229,13 @@ protected:
      * @param momentumFactor The momentum factor
      */
 
-    void updateWeights(const twoDimensional &deltas, const double learningRate, const double momentumFactor) {
+    void updateWeights(const twoDimensional &deltas, const float learningRate, const float momentumFactor) {
         // Update weights with the given deltas
         for (size_t outputLayer = layers - 2; outputLayer > 0; outputLayer--) {
             const size_t inputLayer = outputLayer - 1;
             for (size_t j = 0; j < nodes[inputLayer]; j++) {
                 for (size_t k = 0; k < nodes[outputLayer]; k++) {
-                    const double change = deltas[outputLayer][k] * activations[inputLayer][j];
+                    const float change = deltas[outputLayer][k] * activations[inputLayer][j];
                     weights[inputLayer][j][k] += learningRate * change + momentumFactor * this->change[inputLayer][j][k];
                     this->change[inputLayer][j][k] = change;
                 }
@@ -244,10 +243,10 @@ protected:
         }
     }
 
-    double calculateError(const oneDimensional &targets) const {
+    float calculateError(const oneDimensional &targets) const {
         const size_t end = layers - 1;
         // Calculate error
-        double error = 0.0;
+        float error = 0.0;
         for (size_t k = 0; k < nodes[end]; k++) {
             error += (targets[k] - activations[end][k]) * (targets[k] - activations[end][k]);
         }
@@ -269,7 +268,7 @@ public:
         }
     }
 
-    double train(const threeDimensional &patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
+    float train(const threeDimensional &patterns, const size_t iterations = 10000, const float N = 0.5, const float M = 0.1) {
         const size_t last = layers - 1;
         for (const twoDimensional &pattern : patterns) {
             if (pattern[0].size() != input) {
@@ -286,7 +285,7 @@ public:
             }
             if (i % 10000 == 0) // Should make adjustable
             {
-                double error = 0.0;
+                float error = 0.0;
                 for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
@@ -296,7 +295,7 @@ public:
         }
 
         // Get error
-        double error = 0.0;
+        float error = 0.0;
         for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
@@ -304,7 +303,7 @@ public:
         return error;
     }
 
-    double randTrain(threeDimensional patterns, const size_t iterations = 10000, const double N = 0.5, const double M = 0.1) {
+    float randTrain(threeDimensional patterns, const size_t iterations = 10000, const float N = 0.5, const float M = 0.1) {
         const size_t last = layers - 1;
 
         // Verify the patterns are the right size to be used in the network
@@ -329,7 +328,7 @@ public:
 
             // Verbose on training (Should make adjustable)
             if (i % 10000 == 0) {
-                double error = 0.0;
+                float error = 0.0;
                 for (const twoDimensional &pattern : patterns) {
                     update(pattern[0]);
                     error += calculateError(pattern[1]);
@@ -339,7 +338,7 @@ public:
         }
 
         // Get the error of the network
-        double error = 0.0;
+        float error = 0.0;
         for (const twoDimensional &pattern : patterns) {
             update(pattern[0]);
             error += calculateError(pattern[1]);
@@ -395,8 +394,8 @@ public:
             const size_t output = nodes[i + 1], input = nodes[i];
             for (size_t j = 0; j < input; j++) {
                 for (size_t k = 0; k < output; k++) {
-                    out.write((char *)&weights[i][j][k], double_size);
-                    out.write((char *)&change[i][j][k], double_size);
+                    out.write((char *)&weights[i][j][k], float_size);
+                    out.write((char *)&change[i][j][k], float_size);
                 }
             }
         }

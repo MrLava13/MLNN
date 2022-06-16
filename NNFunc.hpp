@@ -12,7 +12,7 @@ using std::to_string;
 using std::vector;
 
 // Some type defines because it is somewhat tedious to type out
-typedef vector<double> oneDimensional;
+typedef vector<float> oneDimensional;
 typedef vector<oneDimensional> twoDimensional;
 typedef vector<twoDimensional> threeDimensional;
 
@@ -25,9 +25,9 @@ oneDimensional fill(const size_t size, const vector<size_t> &inputs) {
 }
 
 #define RAND_DIV 3.0518509475997192270657620838392176665365695953369140625e-05
-#define rnd(a, b) (b - a) * (static_cast<double>(std::rand()) * RAND_DIV) + a
+#define rnd(a, b) (b - a) * (static_cast<float>(std::rand()) * RAND_DIV) + a
 
-twoDimensional makeMatrix(const size_t I, const size_t J, const double fill = 1.0) {
+twoDimensional makeMatrix(const size_t I, const size_t J, const float fill = 1.0) {
     twoDimensional m(I);
     for (size_t i = 0; i < I; i++) {
         m[i] = oneDimensional(J);
@@ -38,7 +38,7 @@ twoDimensional makeMatrix(const size_t I, const size_t J, const double fill = 1.
     return m;
 }
 
-oneDimensional makeRandom(const size_t I, const double a, const double b) {
+oneDimensional makeRandom(const size_t I, const float a, const float b) {
     oneDimensional o(I);
     for (size_t i = 0; i < I; i++) {
         o[i] = rnd(a, b);
@@ -46,7 +46,7 @@ oneDimensional makeRandom(const size_t I, const double a, const double b) {
     return o;
 }
 
-twoDimensional makeRandomMatrix(const size_t I, const size_t J, const double a, const double b) {
+twoDimensional makeRandomMatrix(const size_t I, const size_t J, const float a, const float b) {
     twoDimensional m(I);
     for (size_t i = 0; i < I; i++) {
         m[i] = oneDimensional(J);
@@ -57,10 +57,10 @@ twoDimensional makeRandomMatrix(const size_t I, const size_t J, const double a, 
     return m;
 }
 
-#define sigmoid(x) tanh(x)
+#define sigmoid(x) tanhf(x)
 
-const inline constexpr double dsigmoid(const double y) {
-    const double t = sigmoid(y);
+const inline constexpr float dsigmoid(const float y) {
+    const float t = sigmoid(y);
     return 1.0 - (t * t);
 }
 
